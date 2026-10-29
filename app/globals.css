@@ -1,0 +1,314 @@
+'use client';
+
+import { Canvas, useFrame } from '@react-three/fiber';
+import { Environment, Html, OrbitControls, RoundedBox, ContactShadows } from '@react-three/drei';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import * as THREE from 'three';
+
+type Track = {
+  id: string;
+  title: string;
+  artist: string;
+  source: string;
+};
+
+function RecordLabel({ label }: { label: string }) {
+  const texture = useMemo(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) {
+      return null;
+    }
+
+    ctx.fillStyle = '#2a1d22';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const glow = ctx.createRadialGradient(128, 128, 30, 128, 128, 126);
+    glow.addColorStop(0, 'rgba(255,255,255,0.7)');
+    glow.addColorStop(0.2, 'rgba(249, 200, 120, 0.9)');
+    glow.addColorStop(1, 'rgba(52, 30, 32, 0.1)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(128, 128, 78, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.fillStyle = '#f3ded5';
+    ctx.font = '700 30px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(label.slice(0, 12), 128, 142);
+
+    ctx.fillStyle = '#dfbcb0';
+    ctx.font = '500 16px sans-serif';
+    ctx.fillText('night signal', 128, 175);
+
+    return new THREE.CanvasTexture(canvas);
+  }, [label]);
+
+  return texture ? (
+    <meshStandardMaterial map={texture} roughness={0.8} metalness={0.1} />
+  ) : null;
+}
+
+function VinylDisc({ playing, label }: { playing: boolean; label: string }) {
+  const discRef = useRef<THREE.Mesh>(null);
+
+  useFrame((_, delta) => {
+    if (!discRef.current) return;
+    if (playing) {
+      discRef.current.rotation.z -= delta * 1.2;
+    }
+  });
+
+  return (
+    <group position={[0, 0.09, 0]}>
+      <mesh ref={discRef} rotation={[Math.PI / 2, 0, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[1.42, 1.42, 0.12, 128]} />
+        <meshStandardMaterial color="#171719" roughness={0.9} metalness={0.15} />
+      </mesh>
+
+      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0.08, 0]}>
+        <cylinderGeometry args={[0.98, 0.98, 0.01, 64]} />
+        <RecordLabel label={label} />
+      </mesh>
+
+      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0.09, 0]}>
+        <ringGeometry args={[1.18, 1.22, 64]} />
+        <meshStandardMaterial color="#f0d1a1" emissive="#9a6b27" emissiveIntensity={0.2} />
+      </mesh>
+    </group>
+  );
+}
+
+function Tonearm({ playing }: { playing: boolean }) {
+  const armRef = useRef<THREE.Group>(null);
+
+  useFrame((_, delta) => {
+    if (!armRef.current) return;
+    const target = playing ? -0.62 : -0.9;
+    armRef.current.rotation.z += (target - armRef.current.rotation.z) * Math.min(1, delta * 2.5);
+  });
+
+  return (
+    <group ref={armRef} position={[-0.95, 0.72, 0.5]} rotation={[0.35, 0.1, -0.9]}>
+      <mesh position={[0.35, 0, 0]} castShadow>
+        <boxGeometry args={[1.45, 0.05, 0.05]} />
+        <meshStandardMaterial color="#d7d7d7" metalness={0.92} roughness={0.26} />
+      </mesh>
+      <mesh position={[0.9, 0.1, 0]} castShadow>
+        <boxGeometry args={[0.22, 0.06, 0.08]} />
+        <meshStandardMaterial color="#a4a4a4" metalness={0.85} roughness={0.45} />
+      </mesh>
+      <mesh position={[1.12, 0.12, 0]} castShadow>
+        <cylinderGeometry args={[0.05, 0.05, 0.16, 20]} />
+        <meshStandardMaterial color="#d7d7d7" metalness={0.9} roughness={0.28} />
+      </mesh>
+    </group>
+  );
+}
+
+function PlayerBody({ playing, recordLabel, onToggle }: { playing: boolean; recordLabel: string; onToggle: () => void }) {
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <group position={[0, -0.15, 0]}>
+      <RoundedBox args={[4.6, 2.5, 1.8]} radius={0.14} smoothness={4} castShadow receiveShadow>
+        <meshStandardMaterial color="#2b201a" metalness={0.7} roughness={0.5} />
+      </RoundedBox>
+
+      <mesh position={[0, 0.95, 0.95]} castShadow>
+        <boxGeometry args={[4.1, 0.62, 0.18]} />
+        <meshStandardMaterial color="#3a2c24" metalness={0.55} roughness={0.72} />
+      </mesh>
+
+      <mesh position={[0, 0.25, 0.9]} castShadow>
+        <boxGeometry args={[3.2, 0.85, 0.12]} />
+        <meshStandardMaterial color="#181c26" metalness={0.45} roughness={0.7} />
+      </mesh>
+
+      <mesh position={[0, -0.05, 0.92]} castShadow>
+        <boxGeometry args={[3.15, 0.7, 0.04]} />
+        <meshStandardMaterial color="#0f1116" metalness={0.5} roughness={0.82} />
+      </mesh>
+
+      <VinylDisc playing={playing} label={recordLabel} />
+
+      <Tonearm playing={playing} />
+
+      <group position={[-1.2, -0.78, 0.98]}>
+        <mesh
+          onClick={onToggle}
+          onPointerOver={() => setHovered(true)}
+          onPointerOut={() => setHovered(false)}
+          castShadow
+        >
+          <cylinderGeometry args={[0.26, 0.26, 0.18, 32]} />
+          <meshStandardMaterial
+            color={playing ? '#c67a3d' : hovered ? '#f7d77d' : '#d9d9d9'}
+            emissive={playing ? '#c27c39' : '#000000'}
+            emissiveIntensity={playing ? 0.8 : 0.18}
+            metalness={0.84}
+            roughness={0.38}
+          />
+        </mesh>
+        <Html position={[0, 0.45, 0]} center>
+          <div className="player-button-label">{playing ? 'Pause' : 'Play'}</div>
+        </Html>
+      </group>
+
+      <mesh position={[1.25, -0.72, 1.02]} castShadow>
+        <cylinderGeometry args={[0.18, 0.18, 0.12, 32]} />
+        <meshStandardMaterial color="#171818" roughness={0.72} metalness={0.62} />
+      </mesh>
+
+      <mesh position={[1.75, -0.72, 1.02]} castShadow>
+        <boxGeometry args={[0.52, 0.15, 0.18]} />
+        <meshStandardMaterial color="#d3b27b" metalness={0.78} roughness={0.32} />
+      </mesh>
+
+      <mesh position={[-0.4, -0.68, 1.04]} castShadow>
+        <boxGeometry args={[1.9, 0.14, 0.16]} />
+        <meshStandardMaterial color="#6a4428" metalness={0.35} roughness={0.88} />
+      </mesh>
+    </group>
+  );
+}
+
+function SceneContent({ playing, track, onToggle }: { playing: boolean; track: Track; onToggle: () => void }) {
+  const lightRef = useRef<THREE.SpotLight>(null);
+
+  useFrame((state) => {
+    if (!lightRef.current) return;
+    lightRef.current.position.x = Math.sin(state.clock.elapsedTime * 0.45) * 1.8;
+    lightRef.current.position.y = 2.3 + Math.cos(state.clock.elapsedTime * 0.3) * 0.2;
+  });
+
+  return (
+    <>
+      <color attach="background" args={['#120d17']} />
+      <fog attach="fog" args={['#120d17', 8, 18]} />
+      <ambientLight intensity={0.9} color="#f5d7b0" />
+      <spotLight ref={lightRef} position={[1.5, 5, 4]} intensity={25} angle={0.52} penumbra={0.8} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
+      <pointLight position={[-2.8, 1.8, 2.7]} intensity={2.5} color="#79a4ff" />
+      <pointLight position={[2.5, 1.6, -2.5]} intensity={1.6} color="#ffb38a" />
+
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.45, 0]} receiveShadow>
+        <circleGeometry args={[6, 64]} />
+        <meshStandardMaterial color="#20161d" roughness={0.92} metalness={0.08} />
+      </mesh>
+
+      <PlayerBody playing={playing} recordLabel={track.title} onToggle={onToggle} />
+      <ContactShadows position={[0, -1.37, 0]} opacity={0.6} scale={8} blur={2.8} far={4} />
+      <Environment preset="night" />
+    </>
+  );
+}
+
+export default function PlayerStage({ tracks }: { tracks: Track[] }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [trackIndex, setTrackIndex] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!audioRef.current) return;
+    audioRef.current.pause();
+    audioRef.current.src = tracks[trackIndex].source;
+    audioRef.current.load();
+    if (playing) {
+      audioRef.current.play().catch(() => {
+        setPlaying(false);
+      });
+    }
+  }, [trackIndex, playing, tracks]);
+
+  const currentTrack = tracks[trackIndex];
+
+  const handleToggle = () => {
+    if (!audioRef.current) {
+      setPlaying((prev) => !prev);
+      return;
+    }
+
+    if (playing) {
+      audioRef.current.pause();
+      setPlaying(false);
+      return;
+    }
+
+    audioRef.current.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+  };
+
+  const handleNext = () => {
+    setTrackIndex((prev) => (prev + 1) % tracks.length);
+    setPlaying(true);
+  };
+
+  const handlePrevious = () => {
+    setTrackIndex((prev) => (prev - 1 + tracks.length) % tracks.length);
+    setPlaying(true);
+  };
+
+  return (
+    <div className="player-viewport" aria-label="3D music player">
+      <audio ref={audioRef} preload="auto" src={currentTrack.source} />
+
+      <div className="player-meta">
+        <div className="playing-indicator" data-active={playing} />
+        <div>
+          <p className="meta-label">Now playing</p>
+          <h2>{currentTrack.title}</h2>
+          <p>{currentTrack.artist}</p>
+        </div>
+      </div>
+
+      <div className="player-controls">
+        <button type="button" onClick={handlePrevious} aria-label="Previous track">
+          ⏮
+        </button>
+        <button type="button" className="primary" onClick={handleToggle} aria-label={playing ? 'Pause track' : 'Play track'}>
+          {playing ? 'Pause' : 'Play'}
+        </button>
+        <button type="button" onClick={handleNext} aria-label="Next track">
+          ⏭
+        </button>
+      </div>
+
+      {mounted ? (
+        <Canvas
+          shadows
+          camera={{ position: [4.7, 2.3, 5.2], fov: 34 }}
+          gl={{ antialias: true }}
+          dpr={[1, 1.8]}
+        >
+          <Suspense fallback={null}>
+            <SceneContent playing={playing} track={currentTrack} onToggle={handleToggle} />
+            <OrbitControls
+              enablePan={false}
+              enableZoom={true}
+              maxPolarAngle={Math.PI / 2.2}
+              minPolarAngle={Math.PI / 3.2}
+              minDistance={4.8}
+              maxDistance={7.8}
+              target={[0, 0.1, 0.2]}
+            />
+          </Suspense>
+        </Canvas>
+      ) : (
+        <div className="canvas-placeholder" aria-live="polite">
+          Loading player…
+        </div>
+      )}
+    </div>
+  );
+}
